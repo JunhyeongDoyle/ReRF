@@ -68,7 +68,7 @@ $ python llff_data_util.py --video_path [input data dir] --llff_path [output dat
 - --num_frames: Specify the number of frames you wish to convert.
 
 
-<b>Note</b> : If you do not have the poses_bounds.npy file, you can generate the camera pose data using COLMAP. For guidance on generating this data, please refer to the forward-facing scene tutorial using COLMAP [here]("https://sunset1995.github.io/dvgo/tutor_forward_facing.html")
+<b>Note</b> : If you do not have the poses_bounds.npy file, you can generate the camera pose data using COLMAP. For guidance on generating this data, please refer to the forward-facing scene tutorial using COLMAP [here](https://sunset1995.github.io/dvgo/tutor_forward_facing.html)
 
 <br>
 The expected data structure for the input should be:

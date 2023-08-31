@@ -6,7 +6,7 @@ import torch
 ##########  see https://github.com/Fyusion/LLFF for original
 def imread(f):
     if f.endswith('png'):
-        return imageio.imread(f, ignoregamma=True)
+        return imageio.imread(f)  # ignoregamma=True
     else:
         return imageio.imread(f)
 
@@ -278,7 +278,8 @@ def spherify_poses(poses, bds, depths):
 
 
 def load_llff_data(basedir, factor=8, width=None, height=None,
-                   recenter=True, bd_factor=.75, spherify=False, path_zflat=False, load_depths=False,frame_id=0):
+                   recenter=True, bd_factor=.75, spherify=False, path_zflat=False, load_depths=False,frame_id=0,
+                   movie_render_kwargs={}):
 
     poses, bds, imgs, *depths = _load_data(basedir, factor=factor, width=width, height=height,
                                            load_depths=load_depths,frame_id=frame_id) # factor=8 downsamples original imgs by 8x
@@ -321,16 +322,17 @@ def load_llff_data(basedir, factor=8, width=None, height=None,
         close_depth, inf_depth = bds.min()*.9, bds.max()*5.
         dt = .75
         mean_dz = 1./(((1.-dt)/close_depth + dt/inf_depth))
-        focal = mean_dz
+        focal = mean_dz * movie_render_kwargs.get('scale_f', 1)
 
         # Get radii for spiral path
         shrink_factor = .8
-        zdelta = close_depth * .2
+        zdelta = movie_render_kwargs.get('zdelta')
+        zrate = movie_render_kwargs.get('zrate')
         tt = poses[:,:3,3] # ptstocam(poses[:3,3,:].T, c2w).T
-        rads = np.percentile(np.abs(tt), 90, 0)
+        rads = np.percentile(np.abs(tt), 90, 0) * movie_render_kwargs.get('scale_r')
         c2w_path = c2w
-        N_views = 120
-        N_rots = 2
+        N_views = movie_render_kwargs.get('N_views')
+        N_rots = movie_render_kwargs.get('N_rots')
         if path_zflat:
 #             zloc = np.percentile(tt, 10, 0)[2]
             zloc = -close_depth * .1

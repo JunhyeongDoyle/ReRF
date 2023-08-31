@@ -121,11 +121,11 @@ fine_model_and_render = deepcopy(coarse_model_and_render)
 fine_model_and_render.update(dict(
     num_voxels=160**3,
     num_voxels_base=160**3,
-    rgbnet_dim=12,
+    rgbnet_dim=9,
     alpha_init=1e-2,
     fast_color_thres=1e-4,
     maskout_near_cam_vox=False,
-    world_bound_scale=1.05,
+    world_bound_scale=1,
 ))
 
 del deepcopy

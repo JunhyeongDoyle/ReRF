@@ -32,6 +32,7 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
+    
 '''Model'''
 class DirectVoxGO(torch.nn.Module):
     def __init__(self, xyz_min, xyz_max,

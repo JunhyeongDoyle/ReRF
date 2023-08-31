@@ -16,7 +16,7 @@ import numpy as np
 import gc
 import ipdb
 
-from lib import utils, dvgo, dmpigo, dvgo_video
+from lib import utils, dvgo, dvgo_video , dmpigo
 from lib.load_data import load_data, load_data_frame
 from tools.voxelized import sample_grid_on_voxel
 
@@ -56,7 +56,12 @@ def config_parser():
 
     parser.add_argument("--finetune", type=int, default=-1)
     parser.add_argument("--sample_voxels", type=str, default='')
-    parser.add_argument("--render_video", action='store_true')
+    parser.add_argument('--render_video', type=int, default=-1, help='Render the entire video up to this frame number')
+    
+    parser.add_argument("--render_video_flipy", action='store_true')
+    parser.add_argument("--render_video_rot90", default=0, type=int)
+    parser.add_argument("--dump_images", action='store_true')
+    
     parser.add_argument("--render_dyna", action='store_true')
     parser.add_argument("--render_finetune", action='store_true')
     parser.add_argument("--render_video_factor", type=int, default=0,
@@ -77,7 +82,8 @@ def config_parser():
 
 @torch.no_grad()
 def render_viewpoints(model, render_poses, HW, Ks, ndc, render_kwargs,
-                      gt_imgs=None, savedir=None, render_factor=0,
+                      gt_imgs=None, savedir=None, dump_images=False, 
+                      render_factor=0,render_video_flipy=False, render_video_rot90=0,
                       eval_ssim=False, eval_lpips_alex=False, eval_lpips_vgg=False, model_callback = None,skip=1):
     '''Render images for the given viewpoints; run evaluation if gt given.
     '''
@@ -132,6 +138,7 @@ def render_viewpoints(model, render_poses, HW, Ks, ndc, render_kwargs,
         rgbs.append(rgb)
         depths.append(depth)
 
+        """
         if savedir is not None:
 
             print(f'Writing images to {savedir}')
@@ -139,15 +146,26 @@ def render_viewpoints(model, render_poses, HW, Ks, ndc, render_kwargs,
             rgb8 = utils.to8b(rgb)
             filename = os.path.join(savedir, '{:03d}.jpg'.format(i))
             imageio.imwrite(filename, rgb8)
+            
+            #---------------------modified by jhpark--------------------------------
+           
+        
+            
             depth8 =  utils.to8b(1 - depth / np.max(depth))
+            
+            # 단일 채널 그레이스케일을 세 채널로 변환
+            depth8_rgb = np.repeat(depth8[:, :, np.newaxis], 3, axis=2)
+            depth8_rgb = depth8_rgb.squeeze(-1)
+            print(depth8_rgb.shape)
             filename = os.path.join(savedir, '{:03d}_depth.jpg'.format(i))
-            imageio.imwrite(filename, depth8)
-
+            imageio.imwrite(filename, depth8_rgb)
+            # -----------------------------------------------------------------------
+            
             if gt_imgs is not None:
                 rgb8 = utils.to8b(gt_imgs[i])
                 filename = os.path.join(savedir, 'gt_{:03d}.jpg'.format(i))
                 imageio.imwrite(filename, rgb8)
-
+        """
 
         if gt_imgs is not None and render_factor==0:
             p = -10. * np.log10(np.mean(np.square(rgb - gt_imgs[i])))
@@ -507,10 +525,11 @@ def scene_rep_reconstruction(model, args, cfg, cfg_model, cfg_train, xyz_min, xy
     global_step = -1
     for global_step in trange(1+start, 1+N_iters):
         # renew occupancy grid
+        """
         if sub_model.mask_cache is not None and (global_step + 500) % 1000 == 0:
             self_alpha = F.max_pool3d(sub_model.activate_density(sub_model.density), kernel_size=3, padding=1, stride=1)[0,0]
             sub_model.mask_cache.mask &= (self_alpha > sub_model.fast_color_thres)
-
+        """
         # progress scaling checkpoint
         if global_step in cfg_train.pg_scale and current_frame==0:
             n_rest_scales = len(cfg_train.pg_scale)-cfg_train.pg_scale.index(global_step)-1
@@ -642,10 +661,13 @@ def scene_rep_reconstruction(model, args, cfg, cfg_model, cfg_train, xyz_min, xy
             if cfg_train.weight_tv_density>0 and deform_res_stage!="deform":
                 sub_model.density_total_variation_add_grad(
                     cfg_train.weight_tv_density/len(rays_o), global_step<cfg_train.tv_dense_before)
+            
+            """
             if cfg_train.weight_tv_k0>0 and deform_res_stage!="deform":
                 sub_model.k0_total_variation_add_grad(
                     cfg_train.weight_tv_k0/len(rays_o), global_step<cfg_train.tv_dense_before)
-
+            """
+            
         optimizer.step()
         psnr_lst.append(psnr.item())
 
@@ -945,7 +967,7 @@ if __name__=='__main__':
             file.write('{} = {}\n'.format(arg, attr))
     cfg.dump(os.path.join(cfg.basedir, cfg.expname, 'config.py'))
 
-        # train
+    # train
     if not args.render_only:
         if cfg.pca_train.use_pca:
             for i in cfg.pca_train.keyframes:
@@ -971,7 +993,8 @@ if __name__=='__main__':
     if args.render_test or args.render_train>=0 or  args.render_360>=0:
 
         print('render train')
-        frame_id =  args.render_360 if args.render_360>=0 else args.render_train
+        #frame_id =  args.render_360 if args.render_360>=0 else args.render_train
+        frame_id = 0
         if frame_id<0:
             sys.exit()
         data_dict = load_everything_frame(args=args, cfg=cfg, frame_id = frame_id, only_current=True)
@@ -1001,7 +1024,16 @@ if __name__=='__main__':
         ckpt['model_kwargs']['rgbfeat_sigmoid'] = cfg.codec.rgbfeat_sigmoid
         if args.ckpt_name != '':
             ckpt['model_kwargs']['rgbfeat_sigmoid']=False
-        sub_model = dvgo.DirectVoxGO(**ckpt['model_kwargs'])
+            
+        # ---------------------modified by jhpark-------------------------------   
+            
+        if cfg.data.ndc : 
+            sub_model = dmpigo.DirectMPIGO(**ckpt['model_kwargs'])
+        else :
+            sub_model = dvgo.DirectVoxGO(**ckpt['model_kwargs'])
+            
+        # -------------------------------------------------------------------    
+            
         if cfg.use_res and not os.path.exists(os.path.join(cfg.basedir, cfg.expname, 'fine_last_%d_deform.tar' % frame_id)):
             ckpt['model_state_dict']['k0.former_k0'] = sub_model.k0.former_k0  # only for the start frame !!!!!!!!!
         sub_model.load_state_dict(ckpt['model_state_dict'],strict=False)
@@ -1009,7 +1041,8 @@ if __name__=='__main__':
             sub_model.k0.former_k0_cur = sub_model.k0.former_k0
         model.dvgos[str(frame_id)] = sub_model.to(device)
 
-        model.dvgos[str(frame_id)].k0.eval()
+        print(model.dvgos[str(frame_id)].k0)
+        #model.dvgos[str(frame_id)].k0.eval()
 
         stepsize = cfg.fine_model_and_render.stepsize
         render_viewpoints_kwargs = {
@@ -1041,6 +1074,90 @@ if __name__=='__main__':
                 savedir=testsavedir,skip=1,
                 eval_ssim=args.eval_ssim, eval_lpips_alex=args.eval_lpips_alex, eval_lpips_vgg=args.eval_lpips_vgg,
                 **render_viewpoints_kwargs)
+        
+        
+# -----------------------------added by jhpark ------------------------------------------------      
+        
+    if args.render_video > 0:
+        max_frames = args.render_video
+        all_rgbs = []
+        all_depths = []
+        
+        frame_id = 0
+        testsavedir = os.path.join(cfg.basedir, cfg.expname, f'render_video_{frame_id}')
+        os.makedirs(testsavedir, exist_ok=True)
+        
+        for frame_id in range(max_frames):
+            # 1. 해당 프레임에 대한 모델 로드
+            
+            
+            model = dvgo_video.DirectVoxGO_Video()
+            model.current_frame_id = frame_id
+            ckpt_path = os.path.join(cfg.basedir, cfg.expname, f'fine_last_{frame_id}.tar')
+            ckpt = torch.load(ckpt_path)
+            model.load_rgb_net(cfg)
+            ckpt['model_kwargs']['rgbnet'] = model.rgbnet
+            ckpt['model_kwargs']['cfg'] = cfg
+            ckpt['model_kwargs']['use_res'] = cfg.use_res
+            if cfg.deform_res_mode == "separate":
+                ckpt['model_kwargs']['use_res'] = cfg.use_res = True
+            ckpt['model_kwargs']['use_deform'] = cfg.use_deform
+            
+            if cfg.data.ndc:
+                sub_model = dmpigo.DirectMPIGO(**ckpt['model_kwargs'])
+            else:
+                sub_model = dvgo.DirectVoxGO(**ckpt['model_kwargs'])
+            
+            if cfg.use_res and not os.path.exists(os.path.join(cfg.basedir, cfg.expname, 'fine_last_%d_deform.tar' % frame_id)):
+                ckpt['model_state_dict']['k0.former_k0'] = sub_model.k0.former_k0  # only for the start frame !!!!!!!!!
+            sub_model.load_state_dict(ckpt['model_state_dict'],strict=False)
+            if cfg.use_res:
+                sub_model.k0.former_k0_cur = sub_model.k0.former_k0
+            model.dvgos[str(frame_id)] = sub_model.to(device)
+
+            print(model.dvgos[str(frame_id)].k0)
+            
+
+            # 2. 해당 모델을 사용하여 렌더링
+            data_dict = load_everything_frame(args=args, cfg=cfg, frame_id=frame_id, only_current=True)
+            
+            stepsize = cfg.fine_model_and_render.stepsize
+            render_viewpoints_kwargs = {
+                'model': model,
+                'ndc': cfg.data.ndc,
+                'render_kwargs': {
+                    'near': data_dict['near'],
+                    'far': data_dict['far'],
+                    'bg': 1 if cfg.data.white_bkgd else 0,
+                    'stepsize': stepsize,
+                    'inverse_y': cfg.data.inverse_y,
+                    'flip_x': cfg.data.flip_x,
+                    'flip_y': cfg.data.flip_y,
+                    'render_depth': True,
+                    'frame_ids': frame_id
+                },
+            }
+            
+            print(data_dict['HW'].shape)
+            print(data_dict['i_test'])
+            
+            rgbs, depths = render_viewpoints(
+                render_poses=data_dict['render_poses'][frame_id][np.newaxis, ...],  # 해당 프레임만 선택
+                HW=data_dict['HW'][data_dict['i_test']][0][np.newaxis, ...],
+                Ks=data_dict['Ks'][data_dict['i_test']][0][np.newaxis, ...],
+                **render_viewpoints_kwargs)
+                
+            all_rgbs.extend(rgbs)
+            all_depths.extend(depths)
+
+            # 3. 모델 메모리에서 해제
+            del model
+            torch.cuda.empty_cache()
+        
+        # 4. 모든 프레임을 하나의 MP4로 저장
+        imageio.mimwrite(os.path.join(testsavedir, 'video.rgb.mp4'), utils.to8b(all_rgbs), fps=25, quality=8, macro_block_size=1)
+        
+# --------------------------------------------------------------------------------------------     
 
     if args.render_360>=0 :
         render_poses=data_dict['poses'][data_dict['i_train']]

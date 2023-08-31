@@ -14,13 +14,12 @@ from torch_scatter import segment_coo
 from torch.utils.cpp_extension import load
 import copy
 
-from . import utils, dvgo, dmpigo
+from . import dmpigo, utils, dvgo
 
 class RGB_Net(torch.nn.Module):
     def __init__(self,dim0=None, rgbnet_width=None, rgbnet_depth=None):
         super(RGB_Net, self).__init__()
         self.rgbnet = None
-
         if dim0 is not None and rgbnet_width is not None and rgbnet_depth is not None:
             self.set_params(dim0,rgbnet_width,rgbnet_depth)
 
@@ -177,12 +176,31 @@ class DirectVoxGO_Video(torch.nn.Module):
         num_voxels = model_kwargs.pop('num_voxels')
         if len(cfg_train.pg_scale) :
             num_voxels = int(num_voxels / (2**len(cfg_train.pg_scale)))
+            
+    # ------------ edited by jhpark ---------------------
+       
+        if cfg.data.ndc:
+            model = dmpigo.DirectMPIGO(
+                xyz_min=xyz_min, xyz_max=xyz_max,
+                num_voxels=num_voxels,
+                **model_kwargs)
+        else:
+            model = dvgo.DirectVoxGO(
+                xyz_min=xyz_min, xyz_max=xyz_max,
+                num_voxels=num_voxels,
+                mask_cache_path=coarse_ckpt_path,
+                **model_kwargs)
+        
+        """    
         model = dvgo.DirectVoxGO(
             xyz_min=xyz_min, xyz_max=xyz_max,
             num_voxels=num_voxels,
             mask_cache_path=coarse_ckpt_path,
             **model_kwargs)
-            
+        """     
+    # ---------------------------------------------------
+    
+    
         model = model.to(device)
         self.dvgos[str(int(frame_id))]=model
 

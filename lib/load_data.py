@@ -19,7 +19,8 @@ def load_data(args):
                 args.datadir, args.factor, args.width, args.height,
                 recenter=True, bd_factor=.75,
                 spherify=args.spherify,
-                load_depths=args.load_depths)
+                load_depths=args.load_depths,
+                movie_render_kwargs=args.movie_render_kwargs)
         hwf = poses[0,:3,-1]
         poses = poses[:,:3,:4]
         print('Loaded llff', images.shape, render_poses.shape, hwf, args.datadir)
@@ -210,7 +211,8 @@ def load_data_frame(args,frame_id, pre_no = 8 ,  only_current = False, scale = 1
             frame_id=frame_id,
             recenter=True,
             spherify=args.spherify,
-            load_depths=args.load_depths)
+            load_depths=args.load_depths,
+            movie_render_kwargs=args.movie_render_kwargs)
         hwf = poses[0, :3, -1]
         poses = poses[:, :3, :4]
         print('Loaded llff', images.shape, render_poses.shape, hwf, args.datadir)
